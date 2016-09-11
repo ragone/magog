@@ -29,33 +29,47 @@ pub type Color = [f32; 4];
 
 pub type ImageRef = usize;
 
-#[derive(Copy, Clone, Debug)]
-pub struct Splat {
-    pub image: ImageRef,
-    pub offset: Point2D<f32>,
-    pub color: Color,
-}
+/// Brush element types parametrized on image type.
+pub mod generic {
+    use std::ops::Deref;
+    use euclid::Point2D;
+    use ::Color;
 
-pub type Frame = Vec<Splat>;
+    #[derive(Clone)]
+    pub struct Splat<T: Clone> {
+        pub image: T,
+        pub offset: Point2D<f32>,
+        pub color: Color,
+    }
 
-#[derive(Clone)]
-pub struct Brush(pub Vec<Frame>);
+    pub type Frame<T> = Vec<Splat<T>>;
 
-impl Deref for Brush {
-    type Target = Vec<Frame>;
+    #[derive(Clone)]
+    pub struct Brush<T: Clone>(pub Vec<Frame<T>>);
 
-    #[inline(always)]
-    fn deref(&self) -> &Vec<Frame> {
-        &self.0
+    impl<T: Clone> Deref for Brush<T> {
+        type Target = Vec<Frame<T>>;
+
+        #[inline(always)]
+        fn deref(&self) -> &Vec<Frame<T>> {
+            &self.0
+        }
     }
 }
+
+pub type Splat = generic::Splat<vitral::ImageData<usize>>;
+
+pub type Frame = generic::Frame<vitral::ImageData<usize>>;
+
+pub type Brush = generic::Brush<vitral::ImageData<usize>>;
+
 
 // Brush implements Loadable so we can have a cache for it, but there's no actual implicit load
 // method, brushes must be inserted manually in code.
 //
 // (We *could* make a load method later and have it read configuration files or something that
 // specify te brush.)
-impl Loadable for Brush {}
+impl<T: Clone> Loadable for generic::Brush<T> {}
 
 impl_store!(BRUSH, String, Brush);
 
@@ -137,7 +151,8 @@ impl<'a, V: Copy + Eq + 'a> BrushBuilder<'a, V> {
         }
 
         let image: Resource<SplatImage, SubImageSpec> = Resource::new(key.clone()).unwrap();
-        let ret = self.builder.add_image(&*image);
+        // let ret = self.builder.add_image(&*image);
+        let ret = 0;
 
         self.splat_images.insert(key.clone(), ret);
 
@@ -245,10 +260,17 @@ impl<'a, V: Copy + Eq + 'a> BrushBuilder<'a, V> {
     /// Wall tiles are chopped up from two 32x32 images. One contains the center pillar wallform
     /// and the other contains the two long sides wallform.
     pub fn wall(self, center_x: u32, center_y: u32, sides_x: u32, sides_y: u32) -> Self {
-        self.splat(center_x, center_y, 16, 32).offset(16, 16)
-            .frame().splat(center_x + 16, center_y, 16, 32).offset(0, 16)
-            .frame().splat(sides_x, sides_y, 16, 32).offset(16, 16)
-            .frame().splat(sides_x + 16, sides_y, 16, 32).offset(0, 16)
+        self.splat(center_x, center_y, 16, 32)
+            .offset(16, 16)
+            .frame()
+            .splat(center_x + 16, center_y, 16, 32)
+            .offset(0, 16)
+            .frame()
+            .splat(sides_x, sides_y, 16, 32)
+            .offset(16, 16)
+            .frame()
+            .splat(sides_x + 16, sides_y, 16, 32)
+            .offset(0, 16)
     }
 
     /// Start a new frame in the current brush.
@@ -270,7 +292,7 @@ impl<'a, V: Copy + Eq + 'a> BrushBuilder<'a, V> {
         mem::swap(&mut brush, &mut self.brush);
         assert!(!brush.is_empty());
 
-        Brush::insert_resource(name, Brush(brush));
+        Brush::insert_resource(name, generic::Brush(brush));
 
         // Reset color
         self.color = WHITE;
